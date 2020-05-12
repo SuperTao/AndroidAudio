@@ -26,7 +26,7 @@ Flags to be set in AudioTrack–AUDIO_OUTPUT_FLAG_DIRECT |AUDIO_OUTPUT_FLAG_COMP
 Supported channels –1, 2, 2.1, 4, 5, 5.1, 6, 7.1
 
 ```
-
+
 * Deep buffer playback
 
 音乐、视频等对时延要求不高的放音场景。
@@ -87,17 +87,17 @@ recording
 * Compress mode
 
 Mode of recording where encoded packets are received bythe APSS directly from the ADSP; it is supported for AMR WB format only
-
+
 * Nontunnelmode
 
 Mode of recording where PCM data from the mic is preprocessed in DSP and received by the APSS, which then encodes the PCM to the required encoding format by using the DSP-based or software-based encoder
-
+
 Examples include camcorder recording and in-call recording
-
+
 * Multichannel mode
 
 Used for capturing more than 2channels of the PCM stream and encoding them into a multichannel codec format like AC3
-
+
 Examples include surround sound camcorder recording, 4 to 6 channel upsamplingfor 5.1 channel encoding
 
 BE DAIs：

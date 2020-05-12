@@ -4,5 +4,5 @@ android版本：android Q。
 
 kernel版本：4.9。
 
-* [音频底层架构](./doc/)
+* [audio_hardware_interfaces_and_data_flow](./doc/audio_hardware_interfaces_and_data_flow.md):音频底层架构
 
