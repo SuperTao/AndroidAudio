@@ -1,6 +1,6 @@
 msm8953的音频架构如下图所示：
 
-![pic](./pic/arch_c.png)
+![pic](../pic/arch_c.png)
 
 高通的音频架构，在底层采用前端(Front End)和后端(Back End)两个dai link进行控制。
 
