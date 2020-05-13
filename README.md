@@ -8,5 +8,5 @@ kernel版本：4.9。
 
 * [mixer_paths.xml](https://www.cnblogs.com/helloworldtoyou/p/8378604.html): 高通mixer_paths.xml文件的调用过程
 
-* [QACT tools](./doc/Qualcomm Audio Calibration Tool User Guide - Simplified Chinese.pdf): QACT调试工具的使用
+* [QACT tools](./doc/Qualcomm\ Audio\ Calibration\ Tool\ User\ Guide\ -\ Simplified\ Chinese.pdf): QACT调试工具的使用
 
