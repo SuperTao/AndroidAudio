@@ -10,3 +10,5 @@ kernel版本：4.9。
 
 * [QACT tools](./doc/Qualcomm_Audio_Calibration_Tool_User_Guide-Simplified_Chinese.pdf): QACT调试工具的使用
 
+* [ASOC machine](./doc/asoc_machine.md): ASOC machine驱动分析
+
