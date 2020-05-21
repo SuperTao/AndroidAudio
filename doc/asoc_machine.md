@@ -32,12 +32,12 @@ endif
     int_codec: sound {
         status = "okay";
         compatible = "qcom,msm8952-audio-codec";
-        qcom,model = "msm8953-snd-card-mtp";    // 声卡名称
-        reg = <0xc051000 0x4>,      // 寄存器地址，已经寄存器长度
+        qcom,model = "msm8953-snd-card-mtp";    		// 声卡名称
+        reg = <0xc051000 0x4>,      					// 寄存器地址，已经寄存器长度
             <0xc051004 0x4>,
             <0xc055000 0x4>,
             <0xc052000 0x4>;
-        reg-names = "csr_gp_io_mux_mic_ctl",    // 寄存器名称
+        reg-names = "csr_gp_io_mux_mic_ctl",    		// 寄存器名称
             "csr_gp_io_mux_spkr_ctl",
             "csr_gp_io_lpaif_pri_pcm_pri_mode_muxsel",
             "csr_gp_io_mux_quin_ctl";
@@ -181,15 +181,15 @@ static int msm8952_asoc_machine_probe(struct platform_device *pdev)
                 GFP_KERNEL);
     if (!pdata)
         return -ENOMEM;
-    // 读取设备树中寄存器
-    muxsel = platform_get_resource_byname(pdev, IORESOURCE_MEM,
+    
+    muxsel = platform_get_resource_byname(pdev, IORESOURCE_MEM,			// 读取设备树中寄存器
             "csr_gp_io_mux_mic_ctl");
     if (!muxsel) {
         dev_err(&pdev->dev, "MUX addr invalid for MI2S\n");
         ret = -ENODEV;
         goto err1;
-		    // 将物理地址映射成虚拟地址
-    pdata->vaddr_gpio_mux_mic_ctl =
+		    
+    pdata->vaddr_gpio_mux_mic_ctl =										// 将物理地址映射成虚拟地址
         ioremap(muxsel->start, resource_size(muxsel));
     if (pdata->vaddr_gpio_mux_mic_ctl == NULL) {
         pr_err("%s ioremap failure for muxsel virt addr\n",
@@ -245,8 +245,8 @@ static int msm8952_asoc_machine_probe(struct platform_device *pdev)
         goto err;
     }
 parse_mclk_freq:
-    // 获取设备树时钟
-    ret = of_property_read_u32(pdev->dev.of_node, mclk, &id);
+    
+    ret = of_property_read_u32(pdev->dev.of_node, mclk, &id);		// 获取设备树时钟
     if (ret) {
 	        dev_err(&pdev->dev,
                 "%s: missing %s in dt node\n", __func__, mclk);
@@ -255,8 +255,8 @@ parse_mclk_freq:
     pdata->mclk_freq = id;
 
     /*reading the gpio configurations from dtsi file*/
-    // wsa为空, 所以不做处理
-    num_strings = of_property_count_strings(pdev->dev.of_node,
+    
+    num_strings = of_property_count_strings(pdev->dev.of_node,		// wsa为空, 所以不做处理
             wsa);
     if (num_strings > 0) {
         if (wsa881x_get_probing_count() < 2) {
@@ -322,11 +322,10 @@ parse_mclk_freq:
             msm_anlg_cdc_update_int_spk_boost(false);
         }
     }
-    // 处理dai_links相关操作
-    card = msm8952_populate_sndcard_dailinks(&pdev->dev);
+    
+    card = msm8952_populate_sndcard_dailinks(&pdev->dev);				// 处理dai_links相关操作
     dev_dbg(&pdev->dev, "default codec configured\n");
-    // qcom.msm-ext-pa，外部功率放大器,external power amplifier
-    num_strings = of_property_count_strings(pdev->dev.of_node,
+    num_strings = of_property_count_strings(pdev->dev.of_node,			// qcom.msm-ext-pa，外部功率放大器,external power amplifier
             ext_pa);
     if (num_strings < 0) {
         dev_err(&pdev->dev,
@@ -334,9 +333,9 @@ parse_mclk_freq:
                 __func__, ext_pa);
         goto err;
     }
-    // 获取外部功放的信息
+    
     for (i = 0; i < num_strings; i++) {
-        ret = of_property_read_string_index(pdev->dev.of_node,
+        ret = of_property_read_string_index(pdev->dev.of_node,			// 获取外部功放的信息
                 ext_pa, i, &ext_pa_str);
         if (ret) {
             dev_err(&pdev->dev, "%s:of read string %s i %d error %d\n",
@@ -357,8 +356,8 @@ parse_mclk_freq:
             pdata->ext_pa = (pdata->ext_pa | QUIN_MI2S_ID);
     }
     pr_debug("%s: ext_pa = %d\n", __func__, pdata->ext_pa);
-    // 外部喇叭功放为空
-    pdata->spk_ext_pa_gpio = of_get_named_gpio(pdev->dev.of_node,
+    
+    pdata->spk_ext_pa_gpio = of_get_named_gpio(pdev->dev.of_node,		// 外部喇叭功放为空
                             spk_ext_pa, 0);
     if (pdata->spk_ext_pa_gpio < 0) {
         dev_err(&pdev->dev, "%s: missing %s in dt node\n",
@@ -367,31 +366,31 @@ parse_mclk_freq:
 
     pdata->spk_ext_pa_gpio_p = of_parse_phandle(pdev->dev.of_node,
                             spk_ext_pa, 0);
-    // 查看美国标准，欧洲标准切换的gpio是否支持
-    ret = is_us_eu_switch_gpio_support(pdev, pdata);
+    
+    ret = is_us_eu_switch_gpio_support(pdev, pdata);					// 查看美国标准，欧洲标准切换的gpio是否支持
     if (ret < 0) {
         pr_err("%s: failed to is_us_eu_switch_gpio_support %d\n",
                 __func__, ret);
         goto err;
     }
-    // 不支持外部喇叭
-	    ret = is_ext_spk_gpio_support(pdev, pdata);
+    
+	ret = is_ext_spk_gpio_support(pdev, pdata);							// 不支持外部喇叭
     if (ret < 0)
         pr_err("%s:  doesn't support external speaker pa\n",
                 __func__);
-    // 没有外部功放
-    enable_aw8738 = of_property_read_bool(pdev->dev.of_node , "action,enable-aw8738");
+    
+    enable_aw8738 = of_property_read_bool(pdev->dev.of_node , "action,enable-aw8738");		// 没有外部功放
     if(enable_aw8738)
     {
         pr_err("msm8952_asoc_machine_probe enable_aw8738\n");
         gpio_request(pdata->spk_ext_pa_gpio, "AW8738_EN");
         gpio_direction_output(pdata->spk_ext_pa_gpio,0);
     }
-    // 不支持外部功放
-    enable_aw87519 = of_property_read_bool(pdev->dev.of_node , "action,enable-aw87519");
+    
+    enable_aw87519 = of_property_read_bool(pdev->dev.of_node , "action,enable-aw87519");	// 不支持外部功放
     pr_info("%s: enable_aw87519 = %d\n", __func__, enable_aw87519);
-    // 获取cdc-comp-gpios
-    pdata->comp_gpio_p = of_parse_phandle(pdev->dev.of_node,
+    
+    pdata->comp_gpio_p = of_parse_phandle(pdev->dev.of_node,			// 获取cdc-comp-gpios
                     "qcom,cdc-comp-gpios", 0);
 
     pdata->mi2s_gpio_p[PRIM_MI2S] = of_parse_phandle(pdev->dev.of_node,
@@ -404,8 +403,8 @@ parse_mclk_freq:
                     "qcom,quat-mi2s-gpios", 0);
     pdata->mi2s_gpio_p[QUIN_MI2S] = of_parse_phandle(pdev->dev.of_node,
                     "qcom,quin-mi2s-gpios", 0);
-    // 获取设备树MIC偏置电压类型
-    ret = of_property_read_string(pdev->dev.of_node,
+    
+    ret = of_property_read_string(pdev->dev.of_node,				// 获取设备树MIC偏置电压类型
         hs_micbias_type, &type);
 		    if (ret) {
         dev_err(&pdev->dev, "%s: missing %s in dt node\n",
@@ -416,20 +415,20 @@ parse_mclk_freq:
         dev_err(&pdev->dev, "Headset is using external micbias\n");
         mbhc_cfg.hs_ext_micbias = true;
     } else {
-        // 使用内部偏置电压
-        dev_err(&pdev->dev, "Headset is using internal micbias\n");
+        
+        dev_err(&pdev->dev, "Headset is using internal micbias\n");		// 使用内部偏置电压
         mbhc_cfg.hs_ext_micbias = false;
     }
-    // 获取AFE时钟
-    ret = of_property_read_u32(pdev->dev.of_node,
+    
+    ret = of_property_read_u32(pdev->dev.of_node,						// 获取AFE时钟
                   "qcom,msm-afe-clk-ver", &val);
     if (ret)
         pdata->afe_clk_ver = AFE_CLK_VERSION_V2;
     else
         pdata->afe_clk_ver = val;
     /* initialize the mclk */
-    // 初始化数字codec
-    pdata->digital_cdc_clk.i2s_cfg_minor_version =
+    
+    pdata->digital_cdc_clk.i2s_cfg_minor_version =						// 初始化数字codec
                     AFE_API_VERSION_I2S_CONFIG;
     pdata->digital_cdc_clk.clk_val = pdata->mclk_freq;
     pdata->digital_cdc_clk.clk_root = 5;
@@ -452,12 +451,9 @@ parse_mclk_freq:
     msm8952_dt_parse_cap_info(pdev, pdata);
 
     card->dev = &pdev->dev;
-    // 数据保存到pdev中
-    platform_set_drvdata(pdev, card);
-    // 数据保存到card中
-    snd_soc_card_set_drvdata(card, pdata);
-    // 获取设备树声卡名称
-    ret = snd_soc_of_parse_card_name(card, "qcom,model");
+    platform_set_drvdata(pdev, card);							// 数据保存到pdev中
+    snd_soc_card_set_drvdata(card, pdata);						// 数据保存到card中
+    ret = snd_soc_of_parse_card_name(card, "qcom,model");		 // 获取设备树声卡名称
     if (ret)
         goto err;
     /* initialize timer */
@@ -472,8 +468,7 @@ parse_mclk_freq:
 	    atomic_set(&quat_mi2s_clk_ref, 0);
     atomic_set(&quin_mi2s_clk_ref, 0);
     atomic_set(&auxpcm_mi2s_clk_ref, 0);
-    // 获取设备树音频通路的信息
-    ret = snd_soc_of_parse_audio_routing(card,
+    ret = snd_soc_of_parse_audio_routing(card,					// 获取设备树音频通路的信息
             "qcom,audio-routing");
     if (ret)
         goto err;
@@ -483,8 +478,8 @@ parse_mclk_freq:
         ret = -EPROBE_DEFER;
         goto err;
     }
-    // 注册声卡
-    ret = devm_snd_soc_register_card(&pdev->dev, card);
+    
+    ret = devm_snd_soc_register_card(&pdev->dev, card);			// 注册声卡
     if (ret) {
         dev_err(&pdev->dev, "snd_soc_register_card failed (%d)\n",
             ret);
@@ -525,12 +520,12 @@ static struct snd_soc_card *msm8952_populate_sndcard_dailinks(
     int len1;
 
     card->name = dev_name(dev);
-    len1 = ARRAY_SIZE(msm8952_dai);     // 获取数组个数
-    // 将msm8952_dai数组复制到msm8952_dai_links数组
-    memcpy(msm8952_dai_links, msm8952_dai, sizeof(msm8952_dai));
+    len1 = ARRAY_SIZE(msm8952_dai);     								// 获取数组个数
+    
+    memcpy(msm8952_dai_links, msm8952_dai, sizeof(msm8952_dai));		// 将msm8952_dai数组复制到msm8952_dai_links数组
     dailink = msm8952_dai_links;
-    // 查看是否存在hdmi的dai_link, 本产品设备树中没有, 使用默认的
-    if (of_property_read_bool(dev->of_node,
+    
+    if (of_property_read_bool(dev->of_node,								// 查看是否存在hdmi的dai_link, 本产品设备树中没有, 使用默认的
                 "qcom,hdmi-dba-codec-rx")) {
         dev_dbg(dev, "%s(): hdmi audio support present\n",
                 __func__);
@@ -544,8 +539,8 @@ static struct snd_soc_card *msm8952_populate_sndcard_dailinks(
                 sizeof(msm8952_quin_dai_link));
         len1 += ARRAY_SIZE(msm8952_quin_dai_link);
     }
-    // 查看是否存在qcom,split-a2dp的定义,也没有
-    if (of_property_read_bool(dev->of_node,
+    
+    if (of_property_read_bool(dev->of_node,							// 查看是否存在qcom,split-a2dp的定义,也没有
                 "qcom,split-a2dp")) {
         dev_dbg(dev, "%s(): split a2dp support present\n",
 		                __func__);
@@ -553,8 +548,8 @@ static struct snd_soc_card *msm8952_populate_sndcard_dailinks(
                 sizeof(msm8952_split_a2dp_dai_link));
         len1 += ARRAY_SIZE(msm8952_split_a2dp_dai_link);
     }
-    // dailink保存到snd_card结构体中
-    card->dai_link = dailink;
+    
+    card->dai_link = dailink;										// dailink保存到snd_card结构体中
     // 长度
     card->num_links = len1;
     return card;
@@ -707,10 +702,10 @@ int snd_soc_register_card(struct snd_soc_card *card)
             return ret;
         }
     }
-    // 设置声卡设备驱动信息
-    dev_set_drvdata(card->dev, card);
-    // 初始化声卡列表
-    snd_soc_initialize_card_lists(card);
+    
+    dev_set_drvdata(card->dev, card);				// 设置声卡设备驱动信息
+    
+    snd_soc_initialize_card_lists(card);			// 初始化声卡列表
 
     INIT_LIST_HEAD(&card->dai_link_list);
     card->num_dai_links = 0;
@@ -724,8 +719,8 @@ int snd_soc_register_card(struct snd_soc_card *card)
     mutex_init(&card->mutex);
     mutex_init(&card->dapm_mutex);
     mutex_init(&card->dapm_power_mutex);
-    // 初始化声卡
-    ret = snd_soc_instantiate_card(card);
+    
+    ret = snd_soc_instantiate_card(card);		// 初始化声卡
     if (ret != 0)
         return ret;
 
