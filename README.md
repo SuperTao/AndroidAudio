@@ -10,3 +10,7 @@ kernel版本：4.9。
 
 * [ASOC machine](./doc/asoc_machine.md): ASOC machine驱动分析
 
+* [ASOC platform](./doc/asoc_platform.md): ASOC platform驱动
+
+* [ASOC codec](./doc/asoc_codec.md): ASOC codec驱动
+
