@@ -1,29 +1,135 @@
 记录msm8952 audio的machine驱动初始化过程。
 
+Machine 是指某一款机器，可以是某款设备，某款开发板，又或者是某款智能手机，由此可以看出Machine几乎是不可重用的，
+
+每个Machine上的硬件实现可能都不一样，CPU不一样，Codec不一样，音频的输入、输出设备也不一样，Machine为CPU、Codec、输入输出设备
+
+提供了一个载体，用于描述一块电路板, 它指明此块电路板上用的是哪个Platform和哪个Codec, 由电路板商负责编写此部分代码。
+
+绑定platform driver和codec driver。ASoC的一切都从Machine驱动开始，包括声卡的注册，绑定Platform和Codec驱动等等。
+
+machine驱动主要功能：
+
+* 注册声卡
+
+* 调用codec_dai的probe函数
+
+* 调用platform的probe函数
+
 在android Q上，audio与高通相关的代码移动到了vendor/qcom/opensource/audio-kernel目录。
 
 SDM450平台的codec分为CPU内部的数字codec和外挂的模拟codec(PM8953)。本文只分析内部数字codec。
 
-通过宏定义可以知道哪些文件进行了编译，如下：
-```
-config/sdm450autoconf.h:32:#define CONFIG_SND_SOC_SDM450 1
+#### snd_soc_card和snd_card
+---
 
-config/sdm450autoconf.h:33:#define CONFIG_SND_SOC_EXT_CODEC_SDM450 1
+```
+struct snd_soc_card {
+    const char *name;
+    const char *long_name;
+    const char *driver_name;
+    struct device *dev;
+    struct snd_card *snd_card;                                              // 指向snd_card结构体
+    struct module *owner;
+
+    struct mutex mutex;
+    struct mutex dapm_mutex;
+    struct mutex dapm_power_mutex;
+
+    bool instantiated;
+
+    int (*probe)(struct snd_soc_card *card);                              // probe函数，还不知道在哪里赋值
+    int (*late_probe)(struct snd_soc_card *card);
+    int (*remove)(struct snd_soc_card *card);
+
+    /* the pre and post PM functions are used to do any PM work before and
+     * after the codec and DAI's do any PM work. */
+    int (*suspend_pre)(struct snd_soc_card *card);
+    int (*suspend_post)(struct snd_soc_card *card);
+    int (*resume_pre)(struct snd_soc_card *card);
+    int (*resume_post)(struct snd_soc_card *card);
+
+    /* callbacks */
+    int (*set_bias_level)(struct snd_soc_card *,
+                  struct snd_soc_dapm_context *dapm,
+                  enum snd_soc_bias_level level);
+    int (*set_bias_level_post)(struct snd_soc_card *,
+                   struct snd_soc_dapm_context *dapm,
+                   enum snd_soc_bias_level level);
+
+    int (*add_dai_link)(struct snd_soc_card *,
+                struct snd_soc_dai_link *link);
+    void (*remove_dai_link)(struct snd_soc_card *,
+                struct snd_soc_dai_link *link);
+
+    long pmdown_time;
+    /* CPU <--> Codec DAI links  */
+    struct snd_soc_dai_link *dai_link;  /* predefined links only */      // 指向所有的dai链路数据结构体
+    int num_links;  /* predefined links only */
+    struct list_head dai_link_list; /* all links */
+    int num_dai_links;
+
+    struct list_head rtd_list;
+    int num_rtd;
+
+    /* optional codec specific configuration */
+    struct snd_soc_codec_conf *codec_conf;
+    int num_configs;
+
+    /*
+     * optional auxiliary devices such as amplifiers or codecs with DAI
+     * link unused
+     */
+    struct snd_soc_aux_dev *aux_dev;
+    int num_aux_devs;
+    struct list_head aux_comp_list;
+
+    const struct snd_kcontrol_new *controls;
+    int num_controls;
+
+    /*
+     * Card-specific routes and widgets.
+     * Note: of_dapm_xxx for Device Tree; Otherwise for driver build-in.
+     */
+    const struct snd_soc_dapm_widget *dapm_widgets;
+    int num_dapm_widgets;
+    const struct snd_soc_dapm_route *dapm_routes;
+    int num_dapm_routes;
+    const struct snd_soc_dapm_widget *of_dapm_widgets;
+    int num_of_dapm_widgets;
+    const struct snd_soc_dapm_route *of_dapm_routes;
+    int num_of_dapm_routes;
+    bool fully_routed;
+
+    struct work_struct deferred_resume_work;
+
+    /* lists of probed devices belonging to this card */
+    struct list_head codec_dev_list;
+	struct list_head widgets;
+    struct list_head paths;
+    struct list_head dapm_list;
+    struct list_head dapm_dirty;
+
+    /* attached dynamic objects */
+    struct list_head dobj_list;
+
+    /* Generic DAPM context for the card */
+    struct snd_soc_dapm_context dapm;
+    struct snd_soc_dapm_stats dapm_stats;
+    struct snd_soc_dapm_update *update;
+
+#ifdef CONFIG_DEBUG_FS
+    struct dentry *debugfs_card_root;
+    struct dentry *debugfs_pop_time;
+#endif
+    u32 pop_time;
+
+    void *drvdata;
+};
 ```
 
-通过asoc/Kbuild
-```
-# for SDM450 internal codec sound card driver
-ifdef CONFIG_SND_SOC_SDM450
-    MACHINE_OBJS += msm8952.o
-endif
-
-# for SDM450 external codec sound card driver
-ifdef CONFIG_SND_SOC_EXT_CODEC_SDM450
-    MACHINE_EXT_OBJS += msm8952-slimbus.o
-    MACHINE_EXT_OBJS += msm8952-dai-links.o
-endif
-```
+#### 设备树定义
+---
 
 驱动在初始化过程中，会用到设备树的信息。msm8953-audio.dtsi
 
@@ -129,6 +235,33 @@ endif
     };
 ```
 
+#### 确定machine文件
+---
+
+通过宏定义可以知道哪些文件进行了编译，如下：
+```
+config/sdm450autoconf.h:32:#define CONFIG_SND_SOC_SDM450 1
+
+config/sdm450autoconf.h:33:#define CONFIG_SND_SOC_EXT_CODEC_SDM450 1
+```
+
+通过asoc/Kbuild
+```
+# for SDM450 internal codec sound card driver
+ifdef CONFIG_SND_SOC_SDM450
+    MACHINE_OBJS += msm8952.o
+endif
+
+# for SDM450 external codec sound card driver
+ifdef CONFIG_SND_SOC_EXT_CODEC_SDM450
+    MACHINE_EXT_OBJS += msm8952-slimbus.o
+    MACHINE_EXT_OBJS += msm8952-dai-links.o
+endif
+```
+
+#### machine初始化
+---
+
 通过Kbuild，确定数字codec初始化文件：asoc/msm8952.c
 ```
 模块初始化
@@ -154,7 +287,17 @@ static struct platform_driver msm8952_asoc_machine_driver = {
 };
 ```
 
+```
+static struct snd_soc_card bear_card = {
+    /* snd_soc_card_msm8952 */
+    .name       = "msm8952-snd-card",
+    .dai_link   = msm8952_dai,
+    .num_links  = ARRAY_SIZE(msm8952_dai),
+};
+```
+
 通过匹配设备树节点，调用probe函数。
+
 ```
 static int msm8952_asoc_machine_probe(struct platform_device *pdev)
 {
@@ -323,7 +466,7 @@ parse_mclk_freq:
         }
     }
     
-    card = msm8952_populate_sndcard_dailinks(&pdev->dev);                // 处理dai_links相关操作
+    card = msm8952_populate_sndcard_dailinks(&pdev->dev);                // 处理dai_links相关操作，后面分析
     dev_dbg(&pdev->dev, "default codec configured\n");
     num_strings = of_property_count_strings(pdev->dev.of_node,          // qcom.msm-ext-pa，外部功率放大器,external power amplifier
             ext_pa);
@@ -509,7 +652,10 @@ err1:
 }
 ```
 
-查看对dai_link的处理
+#### snd_soc_dai_link处理
+---
+
+查看对dai_link的处理，保存所有的dai链路地址到snd_soc_card结构体中。
 
 ```
 static struct snd_soc_card *msm8952_populate_sndcard_dailinks(
@@ -549,18 +695,19 @@ static struct snd_soc_card *msm8952_populate_sndcard_dailinks(
         len1 += ARRAY_SIZE(msm8952_split_a2dp_dai_link);
     }
     
-    card->dai_link = dailink;										// dailink保存到snd_card结构体中
+    card->dai_link = dailink;										// dailink保存到snd_soc_card结构体中
     // 长度
     card->num_links = len1;
     return card;
 }
 ```
+
 重点是其中的msm8952_dai数组，里面定义了前端，后端的各种DAI链路。
 
-CPU <---> 前端DAI接口 <---> 中间DSP <---> 后端DAI接口 <--->数字CODEC <--->模拟codec
+CPU <---> 前端DAI接口 <---> 中间DSP <---> 后端DAI接口 <--->数字CODEC <--->模拟codec <---> 音频设备
 
 ```
-// CPU <---> 前端DAI接口 <---> 中间DSP <---> 后端DAI接口 <--->数字CODEC <--->模拟codec
+// CPU <---> 前端DAI接口 <---> 中间DSP <---> 后端DAI接口 <--->数字CODEC <--->模拟codec <---> 音频设备
 /* Digital audio interface glue - connects codec <---> CPU */
 static struct snd_soc_dai_link msm8952_dai[] = {
 /*********************  前端  ***************************/	
@@ -627,7 +774,7 @@ static struct snd_soc_dai_link msm8952_dai[] = {
         .cpu_dai_name = "msm-dai-q6-mi2s.0",
         .platform_name = "msm-pcm-routing",
         .codecs = dlc_rx1,
-        .num_codecs = CODECS_MAX,
+        .num_codecs = CODECS_MAX,                                          // 2个codec, 一个DIG_CDC, 一个ANA_CDC
         .no_pcm = 1,
         .dpcm_playback = 1,
         .async_ops = ASYNC_DPCM_SND_SOC_PREPARE |
@@ -655,20 +802,24 @@ static struct snd_soc_dai_link msm8952_dai[] = {
 	
 ```
 
+#### 声卡注册
+---
+
 probe函数的其他内容看注释，跟代码就行了。最后是注册声卡。
 
 kernel/msm-4.9/sound/soc/soc-devres.c
+
 ```
 int devm_snd_soc_register_card(struct device *dev, struct snd_soc_card *card)
 {
     struct snd_soc_card **ptr;
     int ret;
 
-    ptr = devres_alloc(devm_card_release, sizeof(*ptr), GFP_KERNEL);
+    ptr = devres_alloc(devm_card_release, sizeof(*ptr), GFP_KERNEL);                 // 申请空间
     if (!ptr)
         return -ENOMEM;
 
-    ret = snd_soc_register_card(card);
+    ret = snd_soc_register_card(card);                                              // 注册声卡
     if (ret == 0) {
         *ptr = card;
         devres_add(dev, ptr);
@@ -692,38 +843,39 @@ int snd_soc_register_card(struct snd_soc_card *card)
     if (!card->name || !card->dev)
         return -EINVAL;
 
-    for (i = 0; i < card->num_links; i++) {
+    for (i = 0; i < card->num_links; i++) {                  // num_links就是前面列出的msm8952_populate_sndcard_dailinks函数里面初始化的，数组元素
+很多
         struct snd_soc_dai_link *link = &card->dai_link[i];
 
-        ret = soc_init_dai_link(card, link);
+        ret = soc_init_dai_link(card, link);                // 每一个snd_soc_dai_link初始化 
         if (ret) {
             dev_err(card->dev, "ASoC: failed to init link %s\n",
                 link->name);
             return ret;
         }
     }
-    
-    dev_set_drvdata(card->dev, card);              // 设置声卡设备驱动信息
-    
-    snd_soc_initialize_card_lists(card);           // 初始化声卡列表
+
+    dev_set_drvdata(card->dev, card);
+
+    snd_soc_initialize_card_lists(card);                   // 初始化链表头
 
     INIT_LIST_HEAD(&card->dai_link_list);
-    card->num_dai_links = 0;
+    card->num_dai_links = 0; 
 
     INIT_LIST_HEAD(&card->rtd_list);
-    card->num_rtd = 0;
+    card->num_rtd = 0; 
 
     INIT_LIST_HEAD(&card->dapm_dirty);
-	    INIT_LIST_HEAD(&card->dobj_list);
-    card->instantiated = 0;
+    INIT_LIST_HEAD(&card->dobj_list);
+    card->instantiated = 0; 
     mutex_init(&card->mutex);
     mutex_init(&card->dapm_mutex);
     mutex_init(&card->dapm_power_mutex);
-    
-    ret = snd_soc_instantiate_card(card);		// 初始化声卡
+
+    ret = snd_soc_instantiate_card(card);                 // 声卡创建
     if (ret != 0)
         return ret;
-
+		
     arch_setup_dma_ops(card->dev, 0, 0, NULL, 0);
 
     /* deactivate pins to sleep state */
@@ -743,4 +895,524 @@ int snd_soc_register_card(struct snd_soc_card *card)
 
     return ret;
 }
+EXPORT_SYMBOL_GPL(snd_soc_register_card);
 ```
+
+#### snd_soc_initialize_card_lists
+
+为每一个snd_soc_card的成员初始化一个链表
+
+```
+static inline void snd_soc_initialize_card_lists(struct snd_soc_card *card)
+{
+    INIT_LIST_HEAD(&card->codec_dev_list);                   //  codec_dev_list
+    INIT_LIST_HEAD(&card->widgets);                          // widgets
+    INIT_LIST_HEAD(&card->paths);                            // paths
+    INIT_LIST_HEAD(&card->dapm_list);                        // dapm_list
+    INIT_LIST_HEAD(&card->aux_comp_list);                    // aux_comp_list
+}
+```
+
+#### snd_soc_pcm_runtime定义
+---
+
+```
+/* SoC machine DAI configuration, glues a codec and cpu DAI together */
+struct snd_soc_pcm_runtime {
+    struct device *dev;
+    struct snd_soc_card *card;
+    struct snd_soc_dai_link *dai_link;
+    struct mutex pcm_mutex;
+    enum snd_soc_pcm_subclass pcm_subclass;
+    struct snd_pcm_ops ops; 
+
+    unsigned int dev_registered:1;
+
+    /* Dynamic PCM BE runtime data */
+    struct snd_soc_dpcm_runtime dpcm[2];
+    int fe_compr;
+
+    long pmdown_time;
+    unsigned char pop_wait:1;
+
+    /* err in case of ops failed */
+    int err_ops;
+    /* runtime devices */
+    struct snd_pcm *pcm;
+    struct snd_compr *compr;
+    struct snd_soc_codec *codec;
+    struct snd_soc_platform *platform;
+    struct snd_soc_dai *codec_dai;
+    struct snd_soc_dai *cpu_dai;
+    struct snd_soc_component *component; /* Only valid for AUX dev rtds */
+
+    struct snd_soc_dai **codec_dais;
+    unsigned int num_codecs;
+
+    struct delayed_work delayed_work;
+#ifdef CONFIG_DEBUG_FS
+    struct dentry *debugfs_dpcm_root;
+    struct dentry *debugfs_dpcm_state;
+#endif
+
+    unsigned int num; /* 0-based and monotonic increasing */
+    struct list_head list; /* rtd list of the soc card */
+};
+```
+
+```
+struct snd_soc_dai {
+    const char *name;
+    int id; 
+    struct device *dev;
+
+    /* driver ops */
+    struct snd_soc_dai_driver *driver;
+
+    /* DAI runtime info */
+    unsigned int capture_active;        /* stream is in use */
+    unsigned int playback_active;       /* stream is in use */
+    unsigned int symmetric_rates:1;
+    unsigned int symmetric_channels:1;
+    unsigned int symmetric_samplebits:1;
+    unsigned int active;
+    unsigned char probed:1;
+
+    struct snd_soc_dapm_widget *playback_widget;
+    struct snd_soc_dapm_widget *capture_widget;
+
+    /* DAI DMA data */
+    void *playback_dma_data;
+    void *capture_dma_data;
+
+    /* Symmetry data - only valid if symmetry is being enforced */
+    unsigned int rate;
+    unsigned int channels;
+    unsigned int sample_bits;
+
+    /* parent platform/codec */
+    struct snd_soc_codec *codec;
+    struct snd_soc_component *component;
+
+    /* CODEC TDM slot masks and params (for fixup) */
+    unsigned int tx_mask;
+    unsigned int rx_mask;
+
+    struct list_head list;
+};
+```
+
+#### soc_init_dai_link
+
+```
+// 这个函数的主要功能，对snd_soc_dai_link_component赋值，然后进行校验
+static int soc_init_dai_link(struct snd_soc_card *card,
+                   struct snd_soc_dai_link *link)
+{
+    int i, ret;
+
+    ret = snd_soc_init_multicodec(card, link);                        // 初始snd_soc_dai_link_component结构体
+    if (ret) {
+        dev_err(card->dev, "ASoC: failed to init multicodec\n");
+        return ret;
+    }
+
+    for (i = 0; i < link->num_codecs; i++) {                         // 有两个codec，一个digital codec,一个analog codec
+        /*
+         * Codec must be specified by 1 of name or OF node,
+         * not both or neither.
+         */
+        if (!!link->codecs[i].name ==
+            !!link->codecs[i].of_node) {
+            dev_err(card->dev, "ASoC: Neither/both codec name/of_node are set for %s\n",
+                link->name);
+            return -EINVAL;
+        }
+        /* Codec DAI name must be specified */
+        if (!link->codecs[i].dai_name) {
+            dev_err(card->dev, "ASoC: codec_dai_name not set for %s\n",
+                link->name);
+            return -EINVAL;
+        }
+    }
+
+    /*
+     * Platform may be specified by either name or OF node, but
+     * can be left unspecified, and a dummy platform will be used.
+     */
+    if (link->platform_name && link->platform_of_node) {
+        dev_err(card->dev,
+            "ASoC: Both platform name/of_node are set for %s\n",
+            link->name);
+        return -EINVAL;
+    }
+	    /*
+     * CPU device may be specified by either name or OF node, but
+     * can be left unspecified, and will be matched based on DAI
+     * name alone..
+     */
+    if (link->cpu_name && link->cpu_of_node) {
+        dev_err(card->dev,
+            "ASoC: Neither/both cpu name/of_node are set for %s\n",
+            link->name);
+        return -EINVAL;
+    }
+    /*
+     * At least one of CPU DAI name or CPU device name/node must be
+     * specified
+     */
+    if (!link->cpu_dai_name &&
+        !(link->cpu_name || link->cpu_of_node)) {
+        dev_err(card->dev,
+            "ASoC: Neither cpu_dai_name nor cpu_name/of_node are set for %s\n",
+            link->name);
+        return -EINVAL;
+    }
+
+    return 0;
+}
+```
+
+#### snd_soc_instantiate_card
+
+绑定cpu_dai、codec_dai、platform 到rtd中
+
+```
+static int snd_soc_instantiate_card(struct snd_soc_card *card)
+{
+    struct snd_soc_codec *codec;
+    struct snd_soc_pcm_runtime *rtd;
+    struct snd_soc_dai_link *dai_link;
+    int ret, i, order;
+
+    mutex_lock(&client_mutex);
+    mutex_lock_nested(&card->mutex, SND_SOC_CARD_CLASS_INIT);
+
+    /* bind DAIs */
+    for (i = 0; i < card->num_links; i++) {
+        ret = soc_bind_dai_link(card, &card->dai_link[i]);                // rtd和codec_dai关联
+        if (ret != 0)
+            goto base_error;
+    }
+
+    /* bind aux_devs too */
+    for (i = 0; i < card->num_aux_devs; i++) {                            // 绑定rtd_aux
+        ret = soc_bind_aux_dev(card, i);
+        if (ret != 0)
+            goto base_error;
+    }
+
+    /* add predefined DAI links to the list */
+    for (i = 0; i < card->num_links; i++)
+        snd_soc_add_dai_link(card, card->dai_link+i);
+
+    /* initialize the register cache for each available codec */
+    list_for_each_entry(codec, &codec_list, list) {
+        if (codec->cache_init)
+            continue;
+        ret = snd_soc_init_codec_cache(codec);                           // 初始化codec cache
+        if (ret < 0)
+            goto base_error;
+    }
+
+    /* card bind complete so register a sound card */
+    ret = snd_card_new(card->dev, SNDRV_DEFAULT_IDX1, SNDRV_DEFAULT_STR1,  // 注册声卡
+            card->owner, 0, &card->snd_card);
+    if (ret < 0) {
+        dev_err(card->dev,
+            "ASoC: can't create sound card for card %s: %d\n",
+			            card->name, ret);
+        goto base_error;
+    }
+
+    soc_init_card_debugfs(card);                                         // 创建debugfs
+
+    card->dapm.bias_level = SND_SOC_BIAS_OFF;                            // dapm电源配置
+    card->dapm.dev = card->dev;
+    card->dapm.card = card;
+    list_add(&card->dapm.list, &card->dapm_list);
+
+#ifdef CONFIG_DEBUG_FS
+    snd_soc_dapm_debugfs_init(&card->dapm, card->debugfs_card_root);
+#endif
+
+#ifdef CONFIG_PM_SLEEP
+    /* deferred resume work */
+    INIT_WORK(&card->deferred_resume_work, soc_resume_deferred);
+#endif
+
+    if (card->dapm_widgets)                                             // dapm
+        snd_soc_dapm_new_controls(&card->dapm, card->dapm_widgets,
+                      card->num_dapm_widgets);
+
+    if (card->of_dapm_widgets)
+        snd_soc_dapm_new_controls(&card->dapm, card->of_dapm_widgets,
+                      card->num_of_dapm_widgets);
+
+    /* initialise the sound card only once */
+    if (card->probe) {
+        ret = card->probe(card);                                       // 调用probe函数,这是哪个probe函数啊？
+        if (ret < 0)
+            goto card_probe_error;
+    }
+
+    /* probe all components used by DAI links on this card */
+    for (order = SND_SOC_COMP_ORDER_FIRST; order <= SND_SOC_COMP_ORDER_LAST;
+            order++) {
+        list_for_each_entry(rtd, &card->rtd_list, list) {
+            ret = soc_probe_link_components(card, rtd, order);        // 这里也调用platform, codec_dai的probe函数
+            if (ret < 0) {
+                dev_err(card->dev,
+                    "ASoC: failed to instantiate card %d\n",
+					                    ret);
+                goto probe_dai_err;
+            }
+        }
+    }
+
+    /* probe auxiliary components */
+    ret = soc_probe_aux_devices(card);                                // 这里面调用probe函数
+    if (ret < 0)
+        goto probe_dai_err;
+
+    /* Find new DAI links added during probing components and bind them.
+     * Components with topology may bring new DAIs and DAI links.
+     */
+    list_for_each_entry(dai_link, &card->dai_link_list, list) {
+        if (soc_is_dai_link_bound(card, dai_link))
+            continue;
+
+        ret = soc_init_dai_link(card, dai_link);
+        if (ret)
+            goto probe_dai_err;
+        ret = soc_bind_dai_link(card, dai_link);
+        if (ret)
+            goto probe_dai_err;
+    }
+
+    /* probe all DAI links on this card */
+    for (order = SND_SOC_COMP_ORDER_FIRST; order <= SND_SOC_COMP_ORDER_LAST;
+            order++) {
+        list_for_each_entry(rtd, &card->rtd_list, list) {
+            ret = soc_probe_link_dais(card, rtd, order);
+            if (ret < 0) {
+                dev_err(card->dev,
+                    "ASoC: failed to instantiate card %d\n",
+                    ret);
+                goto probe_dai_err;
+            }
+        }
+    }
+
+    snd_soc_dapm_link_dai_widgets(card);
+    snd_soc_dapm_connect_dai_link_widgets(card);
+	    if (card->controls)
+        snd_soc_add_card_controls(card, card->controls, card->num_controls);
+
+    if (card->dapm_routes)
+        snd_soc_dapm_add_routes(&card->dapm, card->dapm_routes,
+                    card->num_dapm_routes);
+
+    if (card->of_dapm_routes)
+        snd_soc_dapm_add_routes(&card->dapm, card->of_dapm_routes,
+                    card->num_of_dapm_routes);
+
+    snprintf(card->snd_card->shortname, sizeof(card->snd_card->shortname),
+         "%s", card->name);
+    snprintf(card->snd_card->longname, sizeof(card->snd_card->longname),
+         "%s", card->long_name ? card->long_name : card->name);
+    snprintf(card->snd_card->driver, sizeof(card->snd_card->driver),
+         "%s", card->driver_name ? card->driver_name : card->name);
+    for (i = 0; i < ARRAY_SIZE(card->snd_card->driver); i++) {
+        switch (card->snd_card->driver[i]) {
+        case '_':
+        case '-':
+        case '\0':
+            break;
+        default:
+            if (!isalnum(card->snd_card->driver[i]))
+                card->snd_card->driver[i] = '_';
+            break;
+        }
+    }
+
+    if (card->late_probe) {
+        ret = card->late_probe(card);
+        if (ret < 0) {
+            dev_err(card->dev, "ASoC: %s late_probe() failed: %d\n",
+                card->name, ret);
+            goto probe_aux_dev_err;
+        }
+    }
+
+    snd_soc_dapm_new_widgets(card);
+
+    ret = snd_card_register(card->snd_card);
+        if (ret < 0) {
+        dev_err(card->dev, "ASoC: failed to register soundcard %d\n",
+                ret);
+        goto probe_aux_dev_err;
+    }
+
+    card->instantiated = 1;
+    dapm_mark_endpoints_dirty(card);
+    snd_soc_dapm_sync(&card->dapm);
+    mutex_unlock(&card->mutex);
+    mutex_unlock(&client_mutex);
+
+    return 0;
+
+probe_aux_dev_err:
+    soc_remove_aux_devices(card);
+
+probe_dai_err:
+    soc_remove_dai_links(card);
+
+card_probe_error:
+    if (card->remove)
+        card->remove(card);
+
+    snd_soc_dapm_free(&card->dapm);
+    soc_cleanup_card_debugfs(card);
+    snd_card_free(card->snd_card);
+
+base_error:
+    soc_remove_pcm_runtimes(card);
+    mutex_unlock(&card->mutex);
+    mutex_unlock(&client_mutex);
+
+    return ret;
+}
+```
+
+#### soc_bind_dai_link
+
+主要用于调用codec_dai和platform的probe函数。
+
+```
+static int soc_bind_dai_link(struct snd_soc_card *card,
+    struct snd_soc_dai_link *dai_link)
+{
+    struct snd_soc_pcm_runtime *rtd;
+    struct snd_soc_dai_link_component *codecs = dai_link->codecs;
+    struct snd_soc_dai_link_component cpu_dai_component;
+    struct snd_soc_dai **codec_dais;
+    struct snd_soc_platform *platform;
+    const char *platform_name;
+    int i;
+
+    dev_dbg(card->dev, "ASoC: binding %s\n", dai_link->name);
+
+    if (soc_is_dai_link_bound(card, dai_link)) {                  // 查看是否已经绑定
+        dev_dbg(card->dev, "ASoC: dai link %s already bound\n",
+            dai_link->name);
+        return 0;
+    }
+
+    rtd = soc_new_pcm_runtime(card, dai_link);                   // 初始化snd_soc_pcm_runtime结构体
+    if (!rtd)
+        return -ENOMEM;
+
+    cpu_dai_component.name = dai_link->cpu_name;
+    cpu_dai_component.of_node = dai_link->cpu_of_node;
+    cpu_dai_component.dai_name = dai_link->cpu_dai_name;
+    rtd->cpu_dai = snd_soc_find_dai(&cpu_dai_component);        // snd_soc_pcm_runtime和snd_soc_dai关联
+    if (!rtd->cpu_dai) {
+        dev_err(card->dev, "ASoC: CPU DAI %s not registered\n",
+            dai_link->cpu_dai_name);
+        goto _err_defer;
+    }
+
+    rtd->num_codecs = dai_link->num_codecs;                    // 两个codec
+
+    /* Find CODEC from registered CODECs */
+    codec_dais = rtd->codec_dais;
+    for (i = 0; i < rtd->num_codecs; i++) {
+        codec_dais[i] = snd_soc_find_dai(&codecs[i]);                  // 查看DAI是否已经注册
+        if (!codec_dais[i]) {
+            dev_err(card->dev, "ASoC: CODEC DAI %s not registered\n",
+                codecs[i].dai_name);
+            goto _err_defer;
+			        }
+    }
+
+    /* Single codec links expect codec and codec_dai in runtime data */
+    rtd->codec_dai = codec_dais[0];
+    rtd->codec = rtd->codec_dai->codec;
+
+    /* if there's no platform we match on the empty platform */
+    platform_name = dai_link->platform_name;
+    if (!platform_name && !dai_link->platform_of_node)
+        platform_name = "snd-soc-dummy";
+
+    /* find one from the set of registered platforms */
+    list_for_each_entry(platform, &platform_list, list) {
+        if (dai_link->platform_of_node) {
+            if (platform->dev->of_node !=
+                dai_link->platform_of_node)
+                continue;
+        } else {
+            if (strcmp(platform->component.name, platform_name))
+                continue;
+        }
+
+        rtd->platform = platform;
+    }
+    if (!rtd->platform) {
+        dev_err(card->dev, "ASoC: platform %s not registered\n",
+            ((platform_name) ? platform_name :
+              dai_link->platform_of_node->full_name));
+        goto _err_defer;
+    }
+
+    soc_add_pcm_runtime(card, rtd);                  // 添加到链表中
+    return 0;
+
+_err_defer:
+    soc_free_pcm_runtime(rtd);
+    return  -EPROBE_DEFER;
+}
+```
+
+#### soc_probe_link_components
+---
+
+查看probe函数是合适调用的。
+```
+static int soc_probe_link_components(struct snd_soc_card *card,
+            struct snd_soc_pcm_runtime *rtd,
+                     int order)
+{
+    struct snd_soc_platform *platform = rtd->platform;
+    struct snd_soc_component *component;
+    int i, ret;
+
+    /* probe the CPU-side component, if it is a CODEC */
+    component = rtd->cpu_dai->component;
+    if (component->driver->probe_order == order) {
+        ret = soc_probe_component(card, component);
+        if (ret < 0)
+            return ret;
+    }
+
+    /* probe the CODEC-side components */
+    for (i = 0; i < rtd->num_codecs; i++) {
+        component = rtd->codec_dais[i]->component;
+        if (component->driver->probe_order == order) {
+            ret = soc_probe_component(card, component);            // 调用codec_dai的probe函数
+            if (ret < 0)
+                return ret;
+        }
+    }
+
+    /* probe the platform */
+    if (platform->component.driver->probe_order == order) {
+        ret = soc_probe_component(card, &platform->component);     // 调用platform的probe函数
+        if (ret < 0)
+            return ret;
+    }
+
+    return 0;
+}
+```
+	
