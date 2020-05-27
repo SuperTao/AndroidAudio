@@ -4,11 +4,18 @@ msm8953的音频架构如下图所示：
 
 高通的音频架构，在底层采用前端(Front End)和后端(Back End)两个dai link进行控制。
 
+概念介绍：
+
+DAI：Digital Audio Interfaces，数字音频接口。
+
+常用接口I2S，PCM，PDM。[详解数字音频接口DAI](https://blog.csdn.net/fengfeng0328/article/details/83046175)
+
+
 前端和后端通过DSP连接。
 
 前端处理方式介绍:
 
-FE PCM种类如下：
+### FE PCM
 
 playback的种类：  
 
@@ -101,7 +108,7 @@ Used for capturing more than 2channels of the PCM stream and encoding them into 
 
 Examples include surround sound camcorder recording, 4 to 6 channel upsamplingfor 5.1 channel encoding
 
-BE DAIs：
+### BE DAIs
 
 SLIM_BUS  
 Aux_PCM  
