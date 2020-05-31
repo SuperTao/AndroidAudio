@@ -22,6 +22,8 @@ kernel版本：4.9。
 
 * [AudioPolicy](./doc/AudioPolicy.md): 介绍AudioPolicy的初始化和通路切换
 
+* [Audio HAL音频通路设置](https://blog.csdn.net/azloong/article/details/79383323): hal层音频的设置
+
 
 
 
