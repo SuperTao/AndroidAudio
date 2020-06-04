@@ -23,3 +23,5 @@ kernel版本：4.9。
 * [AudioPolicy](./doc/AudioPolicy.md): 介绍AudioPolicy的初始化和通路切换
 
 * [Audio HAL音频通路设置](./doc/hal_audio_route.md): hal层音频的设置
+
+* [MSM8953双MIC设置](./doc/secondary_mic.md): 添加副MIC，设置降噪。
