@@ -16,7 +16,11 @@ kernel版本：4.9。
 
 * [ASOC PCM](./doc/pcm_analyse.md): PCM的创建
 
+* [audi dts](https://www.cnblogs.com/helloworldtoyou/p/10478427.html): audio dts设置
+
 * [mixer_paths.xml](https://www.cnblogs.com/helloworldtoyou/p/8378604.html): 高通mixer_paths.xml文件的调用过程
+
+* [tinymix使用](https://www.cnblogs.com/helloworldtoyou/p/8676435.html): tinymix使用
 
 * [QACT使用方法](https://www.cnblogs.com/helloworldtoyou/p/8136179.html): 记录QACT的使用方法
 
